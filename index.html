@@ -1305,14 +1305,17 @@
         /* ========== RESPONSIVE ========== */
         @media(max-width:768px) {
             .panel {
-                top: auto;
-                bottom: 14px;
-                left: 10px;
-                right: 10px;
-                width: auto;
-                max-height: 42vh;
-                padding: 14px;
-                border-radius: 18px
+                top: 0;
+                bottom: 80px; /* Leave space for bottom nav */
+                left: 0;
+                right: 0;
+                margin: auto;
+                width: calc(100% - 24px);
+                max-height: 75vh;
+                height: fit-content;
+                padding: 16px;
+                border-radius: 20px;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             }
 
             .fab {
