@@ -2321,24 +2321,36 @@
 
         async function sendLineNotify(message) {
             try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 8000); // timeout 8s
+
                 const res = await fetch(LINE_FUNCTION_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ message: message }),
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeout);
 
                 if (res.ok) {
                     console.log('[LINE] ส่งข้อความสำเร็จ');
                     return true;
                 } else {
-                    const err = await res.json().catch(() => ({}));
-                    console.warn('[LINE] ส่งไม่สำเร็จ', err);
-                    toast('⚠️', 'แจ้งเตือน LINE', 'ส่งข้อความเข้า LINE ไม่สำเร็จ', 4000);
+                    const errData = await res.json().catch(() => ({}));
+                    console.warn('[LINE] ส่งไม่สำเร็จ (HTTP ' + res.status + ')', errData);
+                    // ไม่ toast เพื่อไม่รบกวน UX — log เงียบๆ
                     return false;
                 }
             } catch (err) {
-                console.warn('[LINE] Error:', err.message);
-                toast('⚠️', 'LINE Error', 'ไม่สามารถเชื่อมต่อ Cloud Function ได้', 4000);
+                if (err.name === 'AbortError') {
+                    console.warn('[LINE] Timeout: Cloud Function ไม่ตอบสนอง');
+                } else if (err.message && err.message.toLowerCase().includes('failed to fetch')) {
+                    // CORS หรือ network error — เงียบๆ ไม่ toast
+                    console.warn('[LINE] CORS/Network error: ตรวจสอบ CORS ที่ Cloud Function และ allowed origins');
+                } else {
+                    console.warn('[LINE] Error:', err.message);
+                }
                 return false;
             }
         }
