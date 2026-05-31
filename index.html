@@ -2317,7 +2317,7 @@
            LINE NOTIFY
            ============================================================ */
         // Firebase Cloud Function URL (token เก็บไว้ฝั่ง server แล้ว ไม่ต้องส่งจาก client)
-        const LINE_FUNCTION_URL = 'https://asia-southeast1-kkccomplaint-2e237.cloudfunctions.net/sendLine';
+        const LINE_FUNCTION_URL = '/api/sendLine';
 
         async function sendLineNotify(message) {
             try {
