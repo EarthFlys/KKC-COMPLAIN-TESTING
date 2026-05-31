@@ -2169,7 +2169,7 @@
                 // ปุ่มเลื่อนสถานะ — แสดงเฉพาะ admin + ยังไม่ done
                 let advBtnHtml = '';
                 if (r.status !== 'done' && isAdmin) {
-                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
+                    advBtnHtml = `<button class="advbtn" onclick="advance('${r.docId}', this)"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
                 } else if (r.status === 'done') {
                     advBtnHtml = `<div style="text-align:center;padding:8px 0;font-size:13px;color:var(--ok);font-weight:600">✅ ดำเนินการเสร็จสิ้นแล้ว</div>`;
                 }
@@ -2200,13 +2200,6 @@
                 el.appendChild(card);
             });
 
-            // bind ปุ่มเลื่อนสถานะ — ทำครั้งเดียวหลัง render เสร็จ
-            el.querySelectorAll('.advbtn').forEach(btn => {
-                btn.addEventListener('click', e => {
-                    e.stopPropagation();
-                    advance(btn.dataset.rid, btn);
-                });
-            });
         }
 
         async function advance(docId, btnEl) {
