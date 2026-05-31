@@ -284,11 +284,16 @@
             margin-bottom: 12px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
-            scrollbar-width: none;
+            scrollbar-width: thin;
         }
 
         .cat-filters::-webkit-scrollbar {
-            display: none;
+            height: 4px;
+        }
+
+        .cat-filters::-webkit-scrollbar-thumb {
+            background: var(--scrl);
+            border-radius: 10px;
         }
 
         .cat-chip {
@@ -529,6 +534,32 @@
             height: 170px
         }
 
+        /* ========== TRACKING DONE ANIMATION ========== */
+        @keyframes cardFadeOut {
+            0% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(0.9) translateY(-12px);
+            }
+        }
+
+        .tcard-removing {
+            animation: cardFadeOut 0.35s ease forwards;
+            pointer-events: none;
+        }
+
+        .tcard-collapsing {
+            overflow: hidden;
+            transition: max-height 0.3s ease, margin-bottom 0.3s ease,
+                padding-top 0.3s ease, padding-bottom 0.3s ease, border-width 0.3s ease;
+            pointer-events: none;
+            opacity: 0;
+        }
+
         /* ========== TRACKING ========== */
         .tcard {
             background: var(--card);
@@ -582,7 +613,7 @@
         .pfill {
             height: 100%;
             border-radius: 20px;
-            transition: width 1s cubic-bezier(.25, 1, .5, 1)
+            transition: width 1.2s cubic-bezier(.25, 1, .5, 1), background .5s ease
         }
 
         .p-pend {
@@ -970,27 +1001,36 @@
         .catgrid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 7px;
-            margin-bottom: 18px
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        @media(min-width: 480px) {
+            .catgrid {
+                grid-template-columns: repeat(5, 1fr);
+            }
         }
 
         .catbtn {
             background: var(--card);
             border: 2px solid transparent;
             border-radius: 14px;
-            padding: 10px 6px;
+            padding: 12px 8px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
             cursor: pointer;
             transition: all .25s;
-            font-family: inherit
+            font-family: inherit;
+            width: 100%;
         }
 
         .catbtn:hover {
             background: var(--card-h);
-            transform: translateY(-2px)
+            transform: translateY(-3px);
+            border-color: var(--border);
+            box-shadow: 0 4px 12px var(--shd);
         }
 
         .catbtn.on {
@@ -1001,16 +1041,16 @@
         }
 
         .catbtn .ce {
-            font-size: 28px;
+            font-size: 30px;
             line-height: 1
         }
 
         .catbtn .cl {
             font-size: 11px;
-            font-weight: 500;
+            font-weight: 600;
             color: var(--txt2);
             text-align: center;
-            line-height: 1.2
+            line-height: 1.3
         }
 
         .catbtn.on .cl {
@@ -1306,18 +1346,64 @@
         /* ========== RESPONSIVE ========== */
         @media(max-width:768px) {
             .panel {
-                top: 0;
-                bottom: 80px;
-                /* Leave space for bottom nav */
-                left: 0;
-                right: 0;
+                top: 8px;
+                bottom: 88px;
+                left: 8px;
+                right: 8px;
                 margin: auto;
-                width: calc(100% - 24px);
-                max-height: 75vh;
-                height: fit-content;
-                padding: 16px;
+                width: calc(100% - 16px);
+                max-height: calc(100vh - 110px);
+                height: auto;
+                padding: 14px;
                 border-radius: 20px;
                 box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            }
+
+            .rinfo h4 {
+                font-size: 14px;
+                white-space: normal;
+            }
+
+            .rinfo p {
+                font-size: 12px;
+                -webkit-line-clamp: 3;
+            }
+
+            .rtime {
+                font-size: 11px;
+            }
+
+            .remoji {
+                width: 50px;
+                height: 50px;
+                font-size: 28px;
+            }
+
+            .sbadge {
+                font-size: 11px;
+                padding: 4px 10px;
+            }
+
+            .tcard {
+                padding: 16px;
+            }
+
+            .thead .tt {
+                font-size: 14px;
+            }
+
+            .thead .te {
+                font-size: 24px;
+            }
+
+            .tli {
+                font-size: 13px;
+                padding: 0 0 12px 16px;
+            }
+
+            .advbtn {
+                padding: 12px;
+                font-size: 14px;
             }
 
             .fab {
@@ -1344,6 +1430,18 @@
                 min-width: 260px;
                 max-width: calc(100vw - 40px)
             }
+
+            .snum {
+                font-size: 28px;
+            }
+
+            .slbl {
+                font-size: 11px;
+            }
+
+            .panel-title h2 {
+                font-size: 16px;
+            }
         }
 
         @media(max-width:420px) {
@@ -1353,11 +1451,12 @@
             }
 
             .panel {
-                max-height: 38vh
+                max-height: calc(100vh - 105px);
+                padding: 12px;
             }
 
-            .fab {
-                bottom: calc(38vh + 18px)
+            .rcard {
+                padding: 12px;
             }
         }
     </style>
@@ -1390,6 +1489,8 @@
             <button class="cat-chip" data-c="ไฟฟ้า">💡 ไฟฟ้า/ประปา</button>
             <button class="cat-chip" data-c="สัตว์">🐶 สัตว์จรจัด</button>
             <button class="cat-chip" data-c="ขยะ">🗑️ ขยะ</button>
+            <button class="cat-chip" data-c="เสียงดัง">🔊 เสียงดัง</button>
+            <button class="cat-chip" data-c="อื่นๆ">📋 อื่นๆ</button>
         </div>
 
         <!-- Reports -->
@@ -1593,6 +1694,7 @@
             auth = firebase.auth();
         }
         let isAdmin = false;
+        let _skipNextSnapshot = false;  // must be outer scope - used by advance()
         // ===========================
 
         /* ============================================================
@@ -1680,7 +1782,8 @@
                     loginBox.style.display = 'flex';
                     loggedInBox.style.display = 'none';
                 }
-                if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
+                // Re-render tracking always so admin buttons show/hide correctly
+                renderTracking();
             });
 
             btnLogin.onclick = async () => {
@@ -1693,7 +1796,14 @@
                     adminEmail.value = ''; adminPass.value = '';
                     setTimeout(() => adminOverlay.classList.remove('open'), 1000);
                 } catch (e) {
-                    toast('❌', 'ข้อผิดพลาด', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+                    const code = e.code || '';
+                    let msg = 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+                    if (code.includes('user-not-found')) msg = 'ไม่พบบัญชีนี้ในระบบ';
+                    else if (code.includes('wrong-password') || code.includes('invalid-credential')) msg = 'รหัสผ่านไม่ถูกต้อง';
+                    else if (code.includes('invalid-email')) msg = 'รูปแบบอีเมลไม่ถูกต้อง';
+                    else if (code.includes('too-many-requests')) msg = 'ลองหลายครั้งเกินไป กรุณารอสักครู่';
+                    else if (code.includes('network')) msg = 'ไม่สามารถเชื่อมต่อเครือข่ายได้';
+                    toast('❌', 'เข้าสู่ระบบไม่สำเร็จ', msg);
                 } finally {
                     btnLogin.innerHTML = '<i class="fas fa-sign-in-alt"></i> ล็อกอิน';
                 }
@@ -1703,14 +1813,27 @@
                 auth.signOut();
                 toast('👋', 'ออกจากระบบ', 'ออกจากระบบ Admin เรียบร้อย');
                 adminOverlay.classList.remove('open');
+                // Always re-render tracking to hide admin buttons
+                setTimeout(() => renderTracking(), 100);
             };
 
             // Firebase Realtime Listener
             db.collection('reports').orderBy('timestamp', 'desc').onSnapshot(snapshot => {
-                reports = [];
+                // ถ้า advance() เพิ่ง write ไป ให้ skip snapshot นี้
+                // เพราะ local state อัปเดตแล้ว ป้องกัน re-render ซ้ำ / ปุ่มกลับมา
+                if (_skipNextSnapshot) { _skipNextSnapshot = false; return; }
+                const incoming = [];
                 snapshot.forEach(doc => {
-                    reports.push({ docId: doc.id, ...doc.data() });
+                    // กรอง mock data ที่หลุดเข้า Firestore (id รูปแบบ m + ตัวเลขล้วน)
+                    if (/^m\d+$/.test(doc.id)) return;
+                    incoming.push({ docId: doc.id, ...doc.data() });
                 });
+                // รักษา mk (leaflet marker) จาก reports เดิมไว้
+                incoming.forEach(r => {
+                    const old = reports.find(x => x.docId === r.docId);
+                    if (old && old.mk) r.mk = old.mk;
+                });
+                reports = incoming;
                 renderMarkers();
                 renderList();
                 if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
@@ -1729,7 +1852,8 @@
                     toast('🛡️', 'โหมดทดสอบ', 'เข้าสู่ระบบ Admin (โหมดจำลอง)');
                     adminEmail.value = ''; adminPass.value = '';
                     setTimeout(() => adminOverlay.classList.remove('open'), 1000);
-                    if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
+                    // Always re-render tracking after login to show admin buttons
+                    setTimeout(() => renderTracking(), 1100);
                 } else {
                     toast('⚠️', 'แจ้งเตือน', 'กรุณากรอกอีเมล');
                 }
@@ -1741,7 +1865,8 @@
                 loggedInBox.style.display = 'none';
                 toast('👋', 'ออกจากระบบ', 'ออกจากระบบ Admin (โหมดจำลอง)');
                 adminOverlay.classList.remove('open');
-                if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
+                // Always re-render to hide admin buttons everywhere
+                setTimeout(() => renderTracking(), 100);
             };
         }
 
@@ -1767,17 +1892,20 @@
         function renderMarkers() {
             reports.forEach(r => {
                 if (r.mk) map.removeLayer(r.mk);
-                if (currentFilter === 'ทั้งหมด' || r.title.includes(currentFilter) || r.desc.includes(currentFilter)) { // Basic matching since no cat field exists
-                    // Fallback to emoji match if text match fails
-                    let match = currentFilter === 'ทั้งหมด';
-                    if (!match) {
-                        const mmap = { 'ฉุกเฉิน': '🚨', 'ถนนชำรุด': '🚧', 'น้ำท่วม': '⛈️', 'จราจร': '🚦', 'ไฟฟ้า': '💡', 'สัตว์': '🐶', 'ขยะ': '🗑️' };
-                        if (r.emoji === mmap[currentFilter]) match = true;
+
+                let match = false;
+                if (currentFilter === 'ทั้งหมด') {
+                    match = true;
+                } else {
+                    const mmap = { 'ฉุกเฉิน': '🚨', 'ถนนชำรุด': '🚧', 'น้ำท่วม': '⛈️', 'จราจร': '🚦', 'ไฟฟ้า': '💡', 'สัตว์': '🐶', 'ขยะ': '🗑️', 'เสียงดัง': '🔊', 'อื่นๆ': '📋' };
+                    if (r.emoji === mmap[currentFilter] || (r.title && r.title.includes(currentFilter)) || (r.desc && r.desc.includes(currentFilter))) {
+                        match = true;
                     }
-                    if (match) {
-                        addMarker(r, false);
-                        r.mk.addTo(map);
-                    }
+                }
+
+                if (match) {
+                    addMarker(r, false);
+                    r.mk.addTo(map);
                 }
             });
         }
@@ -1786,13 +1914,10 @@
         /* ============================================================
            RENDER REPORT LIST
            ============================================================ */
-        /* ============================================================
-           RENDER REPORT LIST
-           ============================================================ */
         function getFilteredReports() {
             if (currentFilter === 'ทั้งหมด') return reports;
-            const mmap = { 'ฉุกเฉิน': '🚨', 'ถนนชำรุด': '🚧', 'น้ำท่วม': '⛈️', 'จราจร': '🚦', 'ไฟฟ้า': '💡', 'สัตว์': '🐶', 'ขยะ': '🗑️' };
-            return reports.filter(r => r.emoji === mmap[currentFilter] || r.title.includes(currentFilter));
+            const mmap = { 'ฉุกเฉิน': '🚨', 'ถนนชำรุด': '🚧', 'น้ำท่วม': '⛈️', 'จราจร': '🚦', 'ไฟฟ้า': '💡', 'สัตว์': '🐶', 'ขยะ': '🗑️', 'เสียงดัง': '🔊', 'อื่นๆ': '📋' };
+            return reports.filter(r => r.emoji === mmap[currentFilter] || (r.title && r.title.includes(currentFilter)));
         }
 
         function renderList() {
@@ -1802,14 +1927,15 @@
                 const d = document.createElement('div');
                 d.className = 'rcard'; d.style.animationDelay = `${i * .05}s`;
                 d.innerHTML = `<div class="remoji">${r.emoji}</div><div class="rinfo"><h4>${r.title}</h4><p>${r.desc}</p><span class="rtime">${r.time}</span></div><span class="sbadge ${ST[r.status].cls}">${ST[r.status].txt}</span>`;
-                d.onclick = () => { 
+                d.onclick = () => {
                     document.querySelector('.bn-link[data-t="map"]').click();
-                    map.setView([r.lat, r.lng], 16, { animate: true }); 
+                    map.setView([r.lat, r.lng], 16, { animate: true });
                     setTimeout(() => { if (r.mk) r.mk.openPopup() }, 400);
                 };
                 rlist.appendChild(d);
             });
-            badge.textContent = filtered.length + ' รายงาน';
+            const activeCount = filtered.filter(r => r.status !== 'done').length;
+            badge.textContent = activeCount + ' รายงาน';
         }
         renderList();
 
@@ -1846,12 +1972,25 @@
                 b.classList.add('on');
 
                 const t = b.dataset.t;
+                const catFilters = $('catFilters');
+                const badgeEl = $('badge');
+
                 if (t === 'map') {
                     panel.classList.add('hidden-on-map');
                 } else {
                     panel.classList.remove('hidden-on-map');
                     Object.values(panes).forEach(p => p.classList.remove('on'));
                     panes[t].classList.add('on');
+
+                    // ซ่อน badge + filter เมื่ออยู่ tab tracking หรือ stats
+                    if (t === 'tracking' || t === 'stats') {
+                        catFilters.style.display = 'none';
+                        badgeEl.style.display = 'none';
+                    } else {
+                        catFilters.style.display = '';
+                        badgeEl.style.display = '';
+                    }
+
                     if (t === 'stats') { animStats(); if (!chartsReady) { initCharts(); chartsReady = true } else updCharts() }
                     if (t === 'tracking') renderTracking();
                 }
@@ -2002,86 +2141,167 @@
            TRACKING TAB
            ============================================================ */
         function renderTracking() {
-            const el = $('tlist'); el.innerHTML = '';
-            const filtered = getFilteredReports();
-            if (!filtered.length) { el.innerHTML = '<div class="empty"><i class="fas fa-clipboard-list"></i><p>ยังไม่มีเรื่องที่ต้องติดตาม</p></div>'; return }
+            const el = $('tlist');
+            // ล้างและ rebuild ใหม่ทุกครั้ง
+            el.innerHTML = '';
+            const filtered = getFilteredReports().filter(r => r.status !== 'done');
+            if (!filtered.length) {
+                el.innerHTML = '<div class="empty"><i class="fas fa-clipboard-list"></i><p>ยังไม่มีเรื่องที่ต้องติดตาม</p></div>';
+                return;
+            }
             filtered.forEach(r => {
-                const s = ST[r.status];
+                const s = ST[r.status] || ST.pending;
+                // คำนวณ progress จาก tl จริง
+                const total = r.tl ? r.tl.length : 4;
+                const done = r.tl ? r.tl.filter(x => x.d).length : 0;
+                const pct = Math.round((done / total) * 100);
+
+                // สร้าง timeline HTML
                 let tlh = '';
-                r.tl.forEach((item, i) => {
-                    const cls = item.d ? 'dn' : (i > 0 && r.tl[i - 1].d && !item.d ? 'act' : '');
-                    tlh += `<div class="tli ${cls}">${item.t}${item.tm ? `<span class="tltime">${item.tm}</span>` : ''}</div>`;
-                });
-                const card = document.createElement('div'); card.className = 'tcard';
+                if (r.tl) {
+                    r.tl.forEach((item, i) => {
+                        let cls = '';
+                        if (item.d) {
+                            cls = 'dn';
+                        } else if (i === 0 || r.tl[i - 1]?.d) {
+                            cls = 'act'; // step ปัจจุบัน
+                        }
+                        tlh += `<div class="tli ${cls}">${item.t}${item.tm ? `<span class="tltime">${item.tm}</span>` : ''}</div>`;
+                    });
+                }
 
-                // Show Advance button only for Admins
-                const advBtnHtml = (r.status !== 'done' && isAdmin) ? `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>` :
-                    (r.status === 'done' ? `<div style="text-align:center;padding:6px 0;font-size:12px;color:var(--ok);font-weight:500">✅ ดำเนินการเสร็จสิ้นแล้ว</div>` : '');
+                // ปุ่มเลื่อนสถานะ — แสดงเฉพาะ admin + ยังไม่ done
+                let advBtnHtml = '';
+                if (r.status !== 'done' && isAdmin) {
+                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
+                } else if (r.status === 'done') {
+                    advBtnHtml = `<div style="text-align:center;padding:8px 0;font-size:13px;color:var(--ok);font-weight:600">✅ ดำเนินการเสร็จสิ้นแล้ว</div>`;
+                }
 
+                const displayId = r.id ? String(r.id).slice(-6) : r.docId.slice(-6);
+
+                const card = document.createElement('div');
+                card.className = 'tcard';
                 card.innerHTML = `
-                <div class="thead"><span class="te">${r.emoji}</span><span class="tt">${r.title}</span><span class="tid">#${String(r.id).slice(-6)}</span></div>
-                <div class="pbar"><div class="pfill ${s.pcls}"></div></div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <span class="sbadge ${s.cls}">${s.txt}</span>
-                    <span style="font-size:11px;color:var(--txt2)">📱 ${r.phone}</span>
-                </div>
-                <div class="tline">${tlh}</div>
-                ${advBtnHtml}
-            `;
+                    <div class="thead">
+                        <span class="te">${r.emoji}</span>
+                        <span class="tt">${r.title}</span>
+                        <span class="tid">#${displayId}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                        <div class="pbar" style="flex:1;margin:0">
+                            <div class="pfill ${s.pcls}" style="width:${pct}%"></div>
+                        </div>
+                        <span style="font-size:11px;color:var(--txt2);flex-shrink:0">${done}/${total}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                        <span class="sbadge ${s.cls}">${s.txt}</span>
+                        <span style="font-size:11px;color:var(--txt2)">📱 ${r.phone || '-'}</span>
+                    </div>
+                    <div class="tline">${tlh}</div>
+                    ${advBtnHtml}
+                `;
                 el.appendChild(card);
             });
-            // bind advance buttons
-            el.querySelectorAll('.advbtn').forEach(b => { b.onclick = e => { e.stopPropagation(); advance(b.dataset.rid, b) } });
+
+            // bind ปุ่มเลื่อนสถานะ — ทำครั้งเดียวหลัง render เสร็จ
+            el.querySelectorAll('.advbtn').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    advance(btn.dataset.rid, btn);
+                });
+            });
         }
 
         async function advance(docId, btnEl) {
-            const r = reports.find(x => String(x.docId) === String(docId)); 
+            // หา report จาก local array
+            const r = reports.find(x => String(x.docId) === String(docId));
             if (!r) {
-                toast('❌', 'ข้อผิดพลาด', 'ไม่พบข้อมูลรายงานนี้ในระบบ');
+                toast('❌', 'ข้อผิดพลาด', 'ไม่พบรายงานนี้');
                 return;
             }
+            // ถ้า done แล้วไม่ต้องทำอะไร
+            if (r.status === 'done') return;
+
             const now = new Date();
             const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-            let newStatus = r.status;
-            let newTl = JSON.parse(JSON.stringify(r.tl));
-
-            // find first undone and mark it done
-            for (let item of newTl) { if (!item.d) { item.d = true; item.tm = ts; break } }
-
-            // check remaining undone
-            const undone = newTl.filter(x => !x.d).length;
-            if (undone === 0) {
-                newStatus = 'done';
-            } else {
-                newStatus = 'progress';
+            // deep clone timeline แล้ว mark step แรกที่ยังไม่เสร็จ
+            const newTl = JSON.parse(JSON.stringify(r.tl));
+            for (const item of newTl) {
+                if (!item.d) { item.d = true; item.tm = ts; break; }
             }
+            const newStatus = newTl.every(x => x.d) ? 'done' : 'progress';
 
-            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+            // ล็อคปุ่ม
+            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...'; }
+
             try {
                 if (isFirebaseConfigured) {
-                    await db.collection('reports').doc(docId).update({
-                        status: newStatus,
-                        tl: newTl
-                    });
-                } else {
-                    // Fallback local mode
-                    r.status = newStatus;
-                    r.tl = newTl;
-                    renderTracking();
-                    renderList();
-                    if (r.mk) r.mk.setPopupContent(popupHTML(r));
+                    const docRef = db.collection('reports').doc(docId);
+                    const snap = await docRef.get();
+                    // บอก onSnapshot ให้ข้ามรอบนี้ เพราะเราจัดการ local state เองแล้ว
+                    _skipNextSnapshot = true;
+                    if (snap.exists) {
+                        await docRef.update({ status: newStatus, tl: newTl });
+                    } else {
+                        // doc ยังไม่มีใน Firestore (mock data) → สร้างใหม่
+                        const saveData = Object.assign({}, r, { status: newStatus, tl: newTl });
+                        delete saveData.mk;
+                        await docRef.set(saveData, { merge: true });
+                    }
                 }
+                // อัปเดต local state ทันที
+                r.status = newStatus;
+                r.tl = newTl;
+                if (r.mk) r.mk.setPopupContent(popupHTML(r));
 
                 if (newStatus === 'done') {
-                    toast('🟢', 'ดำเนินการเสร็จสิ้น!', `เรื่อง "${r.title}" เสร็จเรียบร้อยแล้ว`);
+                    // หา card element ใน DOM ก่อน re-render
+                    const cardEl = btnEl ? btnEl.closest('.tcard') : null;
+
+                    // แสดง toast แจ้งเตือนทันที
+                    toast('🟢', 'ดำเนินการเสร็จสิ้น! 🎉', `เรื่อง "${r.title}" เสร็จเรียบร้อยแล้ว`);
                     setTimeout(() => smsToast(r), 1500);
+
+                    // animate card ออก แล้วค่อย re-render
+                    if (cardEl) {
+                        // Phase 1: fade + scale out (0.35s)
+                        cardEl.classList.add('tcard-removing');
+                        setTimeout(() => {
+                            // Phase 2: collapse height (0.3s) 
+                            const h = cardEl.offsetHeight;
+                            cardEl.classList.remove('tcard-removing');
+                            cardEl.classList.add('tcard-collapsing');
+                            cardEl.style.maxHeight = h + 'px';
+                            cardEl.style.marginBottom = '10px';
+                            // Force reflow then collapse
+                            void cardEl.offsetHeight;
+                            cardEl.style.maxHeight = '0px';
+                            cardEl.style.marginBottom = '0px';
+                            cardEl.style.paddingTop = '0px';
+                            cardEl.style.paddingBottom = '0px';
+                            cardEl.style.borderWidth = '0px';
+                        }, 350);
+                        // Phase 3: re-render after collapse done
+                        setTimeout(() => {
+                            renderTracking();
+                            renderList();
+                        }, 700);
+                    } else {
+                        renderTracking();
+                        renderList();
+                    }
                 } else {
-                    toast('🟡', 'สถานะอัปเดต', `เรื่อง "${r.title}" กำลังดำเนินการ`);
+                    // แค่ progress — re-render ทันที แล้วแสดง toast
+                    renderTracking();
+                    renderList();
+                    toast('🟡', 'อัปเดตสถานะแล้ว', `เรื่อง "${r.title}" กำลังดำเนินการ`);
                 }
             } catch (e) {
-                toast('❌', 'ข้อผิดพลาด', 'อัปเดตสถานะไม่สำเร็จ');
-                console.error(e);
+                _skipNextSnapshot = false; // reset flag ถ้า error
+                toast('❌', 'ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + e.message);
+                console.error('[advance]', e);
                 if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-arrow-right"></i> เลื่อนสถานะ'; }
             }
         }
