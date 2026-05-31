@@ -1694,7 +1694,7 @@
             auth = firebase.auth();
         }
         let isAdmin = false;
-        let _skipNextSnapshot = false;  // must be outer scope - used by advance()
+        const _pendingWrite = new Set(); // docId ที่กำลัง write อยู่ — ป้องกัน re-render ซ้ำ
         // ===========================
 
         /* ============================================================
@@ -1819,12 +1819,10 @@
 
             // Firebase Realtime Listener
             db.collection('reports').orderBy('timestamp', 'desc').onSnapshot(snapshot => {
-                // ถ้า advance() เพิ่ง write ไป ให้ skip snapshot นี้
-                // เพราะ local state อัปเดตแล้ว ป้องกัน re-render ซ้ำ / ปุ่มกลับมา
-                if (_skipNextSnapshot) { _skipNextSnapshot = false; return; }
+                // กรอง doc ที่เครื่องนี้กำลัง write อยู่ออก เพื่อป้องกัน re-render ซ้ำ
+                // เครื่องอื่นจะได้รับ snapshot ปกติทุกรายการ
                 const incoming = [];
                 snapshot.forEach(doc => {
-                    // กรอง mock data ที่หลุดเข้า Firestore (id รูปแบบ m + ตัวเลขล้วน)
                     if (/^m\d+$/.test(doc.id)) return;
                     incoming.push({ docId: doc.id, ...doc.data() });
                 });
@@ -1832,6 +1830,11 @@
                 incoming.forEach(r => {
                     const old = reports.find(x => x.docId === r.docId);
                     if (old && old.mk) r.mk = old.mk;
+                    // ถ้า doc นี้กำลัง write อยู่ ให้ใช้ local state แทน (ป้องกัน flicker)
+                    if (_pendingWrite.has(r.docId) && old) {
+                        r.status = old.status;
+                        r.tl = old.tl;
+                    }
                 });
                 reports = incoming;
                 renderMarkers();
@@ -2240,8 +2243,8 @@
                 if (isFirebaseConfigured) {
                     const docRef = db.collection('reports').doc(docId);
                     const snap = await docRef.get();
-                    // บอก onSnapshot ให้ข้ามรอบนี้ เพราะเราจัดการ local state เองแล้ว
-                    _skipNextSnapshot = true;
+                    // mark doc นี้ว่ากำลัง write — snapshot รอบนี้จะใช้ local state แทน
+                    _pendingWrite.add(docId);
                     if (snap.exists) {
                         await docRef.update({ status: newStatus, tl: newTl });
                     } else {
@@ -2250,6 +2253,8 @@
                         delete saveData.mk;
                         await docRef.set(saveData, { merge: true });
                     }
+                    // เขียนเสร็จแล้ว — ปลด lock หลัง 2s (รอ snapshot ถูกส่งกลับมา)
+                    setTimeout(() => _pendingWrite.delete(docId), 2000);
                 }
                 // อัปเดต local state ทันที
                 r.status = newStatus;
@@ -2299,7 +2304,7 @@
                     toast('🟡', 'อัปเดตสถานะแล้ว', `เรื่อง "${r.title}" กำลังดำเนินการ`);
                 }
             } catch (e) {
-                _skipNextSnapshot = false; // reset flag ถ้า error
+                _pendingWrite.delete(docId); // reset lock ถ้า error
                 toast('❌', 'ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + e.message);
                 console.error('[advance]', e);
                 if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-arrow-right"></i> เลื่อนสถานะ'; }
