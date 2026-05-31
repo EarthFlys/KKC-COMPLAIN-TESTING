@@ -1993,6 +1993,14 @@
             };
         });
 
+        // Event delegation สำหรับปุ่ม advbtn ใน tlist — bind ครั้งเดียว ไม่หายเมื่อ re-render
+        $('tlist').addEventListener('click', e => {
+            const btn = e.target.closest('.advbtn');
+            if (!btn || btn.disabled) return;
+            e.stopPropagation();
+            advance(btn.dataset.rid, btn);
+        });
+
         /* ============================================================
            THEME — swap tiles + CSS vars
            ============================================================ */
@@ -2169,11 +2177,10 @@
                 // ปุ่มเลื่อนสถานะ — แสดงเฉพาะ admin + ยังไม่ done
                 let advBtnHtml = '';
                 if (r.status !== 'done' && isAdmin) {
-                    advBtnHtml = `<button class="advbtn" onclick="advance('${r.docId}', this)"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
+                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
                 } else if (r.status === 'done') {
                     advBtnHtml = `<div style="text-align:center;padding:8px 0;font-size:13px;color:var(--ok);font-weight:600">✅ ดำเนินการเสร็จสิ้นแล้ว</div>`;
                 }
-
                 const displayId = r.id ? String(r.id).slice(-6) : r.docId.slice(-6);
 
                 const card = document.createElement('div');
@@ -2200,7 +2207,7 @@
                 el.appendChild(card);
             });
 
-        }
+        } // end renderTracking
 
         async function advance(docId, btnEl) {
             const r = reports.find(x => String(x.docId) === String(docId));
