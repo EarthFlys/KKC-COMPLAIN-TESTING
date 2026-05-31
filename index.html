@@ -1695,6 +1695,9 @@
         }
         let isAdmin = false;
         // onSnapshot คือ single source of truth — ไม่ต้องมี flag พิเศษ
+        const _writingDocs = new Set(); // docId ที่กำลัง write อยู่ — ใช้แสดง spinner ใน re-render
+        const _pendingDoneCards = new Set(); // docId ที่เพิ่ง done — ยังแสดงใน tracking อีกสักครู่ก่อนหาย
+        const _advancingDocs = new Set(); // guard ป้องกัน double-fire จาก event
         // ===========================
 
         /* ============================================================
@@ -1822,12 +1825,16 @@
                 const incoming = [];
                 snapshot.forEach(doc => {
                     if (/^m\d+$/.test(doc.id)) return;
-                    incoming.push({ docId: doc.id, ...doc.data() });
+                    const data = doc.data();
+                    delete data.docId; // ลบ docId เดิมที่อาจถูกบันทึกลง Firestore
+                    incoming.push({ ...data, docId: doc.id });
                 });
                 // รักษา mk (leaflet marker) จาก reports เดิมไว้
                 incoming.forEach(r => {
                     const old = reports.find(x => x.docId === r.docId);
                     if (old && old.mk) r.mk = old.mk;
+                    // ลบ _writingDocs เฉพาะตอน advance() เสร็จแล้ว (ไม่ได้ lock อยู่)
+                    if (!_advancingDocs.has(r.docId)) _writingDocs.delete(r.docId);
                 });
                 reports = incoming;
                 renderMarkers();
@@ -1849,7 +1856,7 @@
                     adminEmail.value = ''; adminPass.value = '';
                     setTimeout(() => adminOverlay.classList.remove('open'), 1000);
                     // Always re-render tracking after login to show admin buttons
-                    setTimeout(() => renderTracking(), 1100);
+                    renderTracking();
                 } else {
                     toast('⚠️', 'แจ้งเตือน', 'กรุณากรอกอีเมล');
                 }
@@ -1993,13 +2000,22 @@
             };
         });
 
-        // Event delegation สำหรับปุ่ม advbtn ใน tlist — bind ครั้งเดียว ไม่หายเมื่อ re-render
-        $('tlist').addEventListener('click', e => {
+        // Event delegation บน document (capture phase) — กัน double-fire ทุกกรณี
+        document.addEventListener('click', e => {
             const btn = e.target.closest('.advbtn');
             if (!btn || btn.disabled) return;
+            e.preventDefault();
             e.stopPropagation();
-            advance(btn.dataset.rid, btn);
-        });
+            e.stopImmediatePropagation();
+            const docId = btn.dataset.rid;
+            if (!docId) return;
+            if (_advancingDocs.has(docId) || _writingDocs.has(docId)) return;
+            _advancingDocs.add(docId);
+            btn.disabled = true;
+            advance(docId).finally(() => {
+                _advancingDocs.delete(docId);
+            });
+        }, true);
 
         /* ============================================================
            THEME — swap tiles + CSS vars
@@ -2122,8 +2138,11 @@
             btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังส่ง...';
             try {
                 if (isFirebaseConfigured) {
-                    r.timestamp = firebase.firestore.FieldValue.serverTimestamp();
-                    await db.collection('reports').add(r);
+                    const saveData = { ...r };
+                    delete saveData.docId; // ไม่บันทึก docId ที่สร้างจาก client ลง Firestore
+                    delete saveData.mk;
+                    saveData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+                    await db.collection('reports').add(saveData);
                 } else {
                     reports.unshift(r);
                     renderMarkers();
@@ -2148,7 +2167,8 @@
             const el = $('tlist');
             // ล้างและ rebuild ใหม่ทุกครั้ง
             el.innerHTML = '';
-            const filtered = getFilteredReports().filter(r => r.status !== 'done');
+            // รวมรายการที่กำลัง write อยู่ด้วย (แม้ status=done) เพื่อแสดง spinner/toast ก่อน card หาย
+            const filtered = getFilteredReports().filter(r => r.status !== 'done' || _writingDocs.has(r.docId) || _pendingDoneCards.has(r.docId));
             if (!filtered.length) {
                 el.innerHTML = '<div class="empty"><i class="fas fa-clipboard-list"></i><p>ยังไม่มีเรื่องที่ต้องติดตาม</p></div>';
                 return;
@@ -2175,11 +2195,16 @@
                 }
 
                 // ปุ่มเลื่อนสถานะ — แสดงเฉพาะ admin + ยังไม่ done
+                const isWriting = _writingDocs.has(r.docId);
+                const isPendingDone = _pendingDoneCards.has(r.docId);
                 let advBtnHtml = '';
-                if (r.status !== 'done' && isAdmin) {
-                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
-                } else if (r.status === 'done') {
+                if (isWriting) {
+                    // กำลังบันทึก — แสดง spinner เสมอ ไม่ว่าสถานะจะเป็นอะไร
+                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}" disabled><i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...</button>`;
+                } else if (isPendingDone || r.status === 'done') {
                     advBtnHtml = `<div style="text-align:center;padding:8px 0;font-size:13px;color:var(--ok);font-weight:600">✅ ดำเนินการเสร็จสิ้นแล้ว</div>`;
+                } else if (r.status !== 'done' && isAdmin) {
+                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
                 }
                 const displayId = r.id ? String(r.id).slice(-6) : r.docId.slice(-6);
 
@@ -2209,22 +2234,31 @@
 
         } // end renderTracking
 
-        async function advance(docId, btnEl) {
+        async function advance(docId) {
+            // ป้องกัน double-call — _advancingDocs ถูก set แล้วจาก event delegation
+            if (_writingDocs.has(docId)) return;
             const r = reports.find(x => String(x.docId) === String(docId));
-            if (!r) { toast('❌', 'ข้อผิดพลาด', 'ไม่พบรายงานนี้'); return; }
-            if (r.status === 'done') return;
+            if (!r || r.status === 'done') return;
 
             const now = new Date();
-            const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const ts = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
+            // เก็บ state เดิมสำหรับ rollback
+            const oldStatus = r.status;
+            const oldTl = JSON.parse(JSON.stringify(r.tl));
+
+            // คำนวณ state ใหม่ — เลื่อน step แรกที่ยังไม่ done
             const newTl = JSON.parse(JSON.stringify(r.tl));
-            for (const item of newTl) {
-                if (!item.d) { item.d = true; item.tm = ts; break; }
-            }
+            for (const item of newTl) { if (!item.d) { item.d = true; item.tm = ts; break; } }
             const newStatus = newTl.every(x => x.d) ? 'done' : 'progress';
 
-            // ล็อคปุ่ม
-            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...'; }
+            // lock + อัปเดต local ทันที
+            _writingDocs.add(docId);
+            r.status = newStatus;
+            r.tl = newTl;
+            if (r.mk) r.mk.setPopupContent(popupHTML(r));
+            renderTracking();
+            renderList();
 
             try {
                 if (isFirebaseConfigured) {
@@ -2233,23 +2267,40 @@
                     if (snap.exists) {
                         await docRef.update({ status: newStatus, tl: newTl });
                     } else {
-                        const saveData = Object.assign({}, r, { status: newStatus, tl: newTl });
+                        const saveData = { ...r, status: newStatus, tl: newTl };
                         delete saveData.mk;
                         await docRef.set(saveData, { merge: true });
                     }
-                    // เขียนเสร็จแล้ว — onSnapshot จะ sync ทุกเครื่องอัตโนมัติ
-                    // แค่แสดง toast แจ้ง user เครื่องนี้
-                    if (newStatus === 'done') {
-                        toast('🟢', 'ดำเนินการเสร็จสิ้น! 🎉', `เรื่อง "${r.title}" เสร็จเรียบร้อยแล้ว`);
-                        setTimeout(() => smsToast(r), 1500);
-                    } else {
-                        toast('🟡', 'อัปเดตสถานะแล้ว', `เรื่อง "${r.title}" กำลังดำเนินการ`);
-                    }
+                } else {
+                    // Fallback mode — simulate async
+                    await new Promise(res => setTimeout(res, 400));
                 }
-            } catch (e) {
-                toast('❌', 'ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + e.message);
-                console.error('[advance]', e);
-                if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-arrow-right"></i> เลื่อนสถานะ'; }
+
+                // สำเร็จ
+                _writingDocs.delete(docId);
+                if (newStatus === 'done') {
+                    _pendingDoneCards.add(docId);
+                    renderTracking();
+                    renderList();
+                    toast('🟢', 'ดำเนินการเสร็จสิ้น! 🎉', 'เรื่อง "' + r.title + '" เสร็จเรียบร้อยแล้ว');
+                    setTimeout(() => smsToast(r), 1500);
+                    setTimeout(() => { _pendingDoneCards.delete(docId); renderTracking(); }, 2500);
+                } else {
+                    renderTracking();
+                    renderList();
+                    toast('🟡', 'อัปเดตสถานะแล้ว', 'เรื่อง "' + r.title + '" กำลังดำเนินการ');
+                }
+            } catch (err) {
+                // rollback
+                r.status = oldStatus;
+                r.tl = oldTl;
+                if (r.mk) r.mk.setPopupContent(popupHTML(r));
+                _writingDocs.delete(docId);
+                _pendingDoneCards.delete(docId);
+                renderTracking();
+                renderList();
+                toast('❌', 'ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + (err?.message || String(err)));
+                console.error('[advance]', err);
             }
         }
 
