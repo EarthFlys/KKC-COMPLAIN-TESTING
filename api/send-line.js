@@ -9,7 +9,7 @@ module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const lineToken = process.env.LINE_TOKEN;
-  if (!lineToken) return res.status(500).json({ error: "LINE_TOKEN not set" });
+  if (!lineToken) return res.status(500).json({ error: "n8IV3g+a9mkQPJ/Wg+MzaTfrqjKsn9hGF/JlE8v8KzplhNSN9xAfcl9p2F1NF8/9TolFzBUnIE3HDlbwINrTz6sJzorst4JZSO39NWa0t4qIokPAeuHxGarC+Qtbuwi/7m0g4JRz5D7KiFbna4bgswdB04t89/1O/w1cDnyilFU=" });
 
   const { message } = req.body || {};
   if (!message) return res.status(400).json({ error: "Missing message" });
