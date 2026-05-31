@@ -1,51 +1,35 @@
-const https = require("https");
+export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-module.exports = async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-  const lineToken = process.env.LINE_TOKEN;
-  if (!lineToken) return res.status(500).json({ error: "n8IV3g+a9mkQPJ/Wg+MzaTfrqjKsn9hGF/JlE8v8KzplhNSN9xAfcl9p2F1NF8/9TolFzBUnIE3HDlbwINrTz6sJzorst4JZSO39NWa0t4qIokPAeuHxGarC+Qtbuwi/7m0g4JRz5D7KiFbna4bgswdB04t89/1O/w1cDnyilFU=" });
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Missing message' });
+  }
 
-  const { message } = req.body || {};
-  if (!message) return res.status(400).json({ error: "Missing message" });
-
-  const payload = JSON.stringify({
-    messages: [{ type: "text", text: message }],
-  });
-
-  return new Promise((resolve) => {
-    const lineReq = https.request(
-      {
-        hostname: "api.line.me",
-        path: "/v2/bot/message/broadcast",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-          Authorization: "Bearer " + lineToken,
-        },
+  try {
+    const response = await fetch('https://notify-api.line.me/api/notify', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.LINE_TOKEN}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      (lineRes) => {
-        let body = "";
-        lineRes.on("data", (c) => (body += c));
-        lineRes.on("end", () => {
-          let parsed = {};
-          try { parsed = JSON.parse(body); } catch {}
-          res.status(lineRes.statusCode).json(parsed);
-          resolve();
-        });
-      }
-    );
-    lineReq.on("error", (e) => {
-      res.status(500).json({ error: e.message });
-      resolve();
+      body: new URLSearchParams({ message }),
     });
-    lineReq.write(payload);
-    lineReq.end();
-  });
-};
+
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
