@@ -321,6 +321,7 @@
             display: none;
             flex: 1;
             overflow-y: auto;
+            min-height: 0;
             animation: fu .3s ease
         }
 
@@ -1801,7 +1802,11 @@
                 const d = document.createElement('div');
                 d.className = 'rcard'; d.style.animationDelay = `${i * .05}s`;
                 d.innerHTML = `<div class="remoji">${r.emoji}</div><div class="rinfo"><h4>${r.title}</h4><p>${r.desc}</p><span class="rtime">${r.time}</span></div><span class="sbadge ${ST[r.status].cls}">${ST[r.status].txt}</span>`;
-                d.onclick = () => { map.setView([r.lat, r.lng], 16, { animate: true }); setTimeout(() => r.mk.openPopup(), 400) };
+                d.onclick = () => { 
+                    document.querySelector('.bn-link[data-t="map"]').click();
+                    map.setView([r.lat, r.lng], 16, { animate: true }); 
+                    setTimeout(() => { if (r.mk) r.mk.openPopup() }, 400);
+                };
                 rlist.appendChild(d);
             });
             badge.textContent = filtered.length + ' รายงาน';
@@ -2030,7 +2035,11 @@
         }
 
         async function advance(docId, btnEl) {
-            const r = reports.find(x => x.docId === docId); if (!r) return;
+            const r = reports.find(x => String(x.docId) === String(docId)); 
+            if (!r) {
+                toast('❌', 'ข้อผิดพลาด', 'ไม่พบข้อมูลรายงานนี้ในระบบ');
+                return;
+            }
             const now = new Date();
             const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
