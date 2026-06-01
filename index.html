@@ -9,7 +9,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
+    <link   
         href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -429,6 +429,7 @@
             color: var(--txt2);
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
             margin: 0;
@@ -1142,6 +1143,62 @@
             transition: all .2s
         }
 
+        #fImage {
+            cursor: pointer;
+        }
+
+        #imagePreview {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .image-preview-item {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 120px;
+        }
+
+        .image-preview-item img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .image-preview-item .remove-btn {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(248, 113, 113, 0.9);
+            border: none;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .2s;
+            opacity: 0;
+        }
+
+        .image-preview-item:hover .remove-btn {
+            opacity: 1;
+        }
+
+        .image-preview-item .remove-btn:hover {
+            background: rgba(248, 113, 113, 1);
+            transform: scale(1.1);
+        }
+
         html.light .finp,
         html.light .ftxt {
             background: rgba(0, 0, 0, .04)
@@ -1367,6 +1424,7 @@
             .rinfo p {
                 font-size: 12px;
                 -webkit-line-clamp: 3;
+                line-clamp: 3;
             }
 
             .rtime {
@@ -1616,6 +1674,12 @@
                     placeholder="อธิบายปัญหาเพิ่มเติม..."></textarea></div>
             <div class="fg"><label>📱 เบอร์โทรศัพท์ (รับ SMS แจ้งผล)</label><input type="tel" class="finp" id="fPhone"
                     placeholder="เช่น 081-234-5678" autocomplete="tel"></div>
+            
+            <div class="fg">
+                <label>📸 แนบรูปภาพ (เพื่อประกอบการแจ้งปัญหา)</label>
+                <input type="file" class="finp" id="fImage" accept="image/*" placeholder="เลือกรูปภาพ">
+                <div id="imagePreview" style="margin-top:8px"></div>
+            </div>
 
             <div class="btnrow">
                 <button class="mbtn mbtn-cancel" id="mcancel">ยกเลิก</button>
@@ -1688,11 +1752,22 @@
 
         const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
         let db = null, auth = null;
+        let firebaseInitFailed = false;
+        
         if (isFirebaseConfigured) {
-            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-            db = firebase.firestore();
-            auth = firebase.auth();
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                console.log('[Firebase] Initialized successfully');
+            } catch (err) {
+                console.error('[Firebase] Initialization failed:', err);
+                firebaseInitFailed = true;
+                db = null;
+                auth = null;
+            }
         }
+        
         let isAdmin = false;
         // onSnapshot คือ single source of truth — ไม่ต้องมี flag พิเศษ
         const _writingDocs = new Set(); // docId ที่กำลัง write อยู่ — ใช้แสดง spinner ใน re-render
@@ -1772,7 +1847,10 @@
         adminOverlay.onclick = e => { if (e.target === adminOverlay) adminOverlay.classList.remove('open') };
 
         // Firebase Auth Listener (or Fallback)
-        if (isFirebaseConfigured) {
+        if (isFirebaseConfigured && db && auth && !firebaseInitFailed) {
+            console.log('[Auth] Using Firebase authentication');
+            let firestoreListenerActive = false;
+            
             auth.onAuthStateChanged(user => {
                 isAdmin = !!user;
                 if (isAdmin) {
@@ -1780,10 +1858,59 @@
                     loginBox.style.display = 'none';
                     loggedInBox.style.display = 'block';
                     adminUserEmail.textContent = user.email;
+                    
+                    // Only set up Firestore listener if not already active
+                    if (!firestoreListenerActive && db) {
+                        console.log('[Auth] Setting up Firestore listener');
+                        firestoreListenerActive = true;
+                        try {
+                            db.collection('reports').orderBy('timestamp', 'desc').onSnapshot(
+                                snapshot => {
+                                    console.log('[Firestore] Received snapshot with', snapshot.docs.length, 'documents');
+                                    const incoming = [];
+                                    snapshot.forEach(doc => {
+                                        if (/^m\d+$/.test(doc.id)) return;
+                                        incoming.push({ docId: doc.id, ...doc.data() });
+                                    });
+                                    
+                                    // Only update if no writes are in progress for any document
+                                    let hasWritingDocs = false;
+                                    for (let docId of _writingDocs) {
+                                        hasWritingDocs = true;
+                                        console.log('[Firestore] Skipping update: write in progress for', docId);
+                                        break;
+                                    }
+                                    
+                                    if (!hasWritingDocs) {
+                                        // Safe to update
+                                        incoming.forEach(r => {
+                                            const old = reports.find(x => x.docId === r.docId);
+                                            if (old && old.mk) r.mk = old.mk;
+                                        });
+                                        reports = incoming;
+                                        renderMarkers();
+                                        renderList();
+                                        if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
+                                        if (document.querySelector('.bn-link.on')?.dataset.t === 'stats') { animStats(); if (chartsReady) updCharts(); }
+                                    } else {
+                                        console.log('[Firestore] Skipping full update due to pending writes');
+                                    }
+                                },
+                                err => {
+                                    console.error('[Firestore] Listener error:', err.code, err.message);
+                                    firestoreListenerActive = false;
+                                }
+                            );
+                        } catch (err) {
+                            console.error('[Auth] Failed to set up Firestore listener:', err);
+                            firestoreListenerActive = false;
+                        }
+                    }
                 } else {
                     adminBtn.classList.remove('logged-in');
                     loginBox.style.display = 'flex';
                     loggedInBox.style.display = 'none';
+                    firestoreListenerActive = false;
                 }
                 // Re-render tracking always so admin buttons show/hide correctly
                 renderTracking();
@@ -1819,31 +1946,9 @@
                 // Always re-render tracking to hide admin buttons
                 setTimeout(() => renderTracking(), 100);
             };
-
-            // Firebase Realtime Listener
-            db.collection('reports').orderBy('timestamp', 'desc').onSnapshot(snapshot => {
-                const incoming = [];
-                snapshot.forEach(doc => {
-                    if (/^m\d+$/.test(doc.id)) return;
-                    const data = doc.data();
-                    delete data.docId; // ลบ docId เดิมที่อาจถูกบันทึกลง Firestore
-                    incoming.push({ ...data, docId: doc.id });
-                });
-                // รักษา mk (leaflet marker) จาก reports เดิมไว้
-                incoming.forEach(r => {
-                    const old = reports.find(x => x.docId === r.docId);
-                    if (old && old.mk) r.mk = old.mk;
-                    // ลบ _writingDocs เฉพาะตอน advance() เสร็จแล้ว (ไม่ได้ lock อยู่)
-                    if (!_advancingDocs.has(r.docId)) _writingDocs.delete(r.docId);
-                });
-                reports = incoming;
-                renderMarkers();
-                renderList();
-                if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
-                if (document.querySelector('.bn-link.on')?.dataset.t === 'stats') { animStats(); if (chartsReady) updCharts(); }
-            });
         } else {
-            // Fallback Logic (No Firebase)
+            // Fallback Logic (No Firebase or Firebase init failed)
+            console.log('[Auth] Using fallback authentication mode');
             btnLogin.onclick = () => {
                 const email = adminEmail.value, pass = adminPass.value;
                 if (email === 'admin@khonkaen.go.th' || (email && pass)) {
@@ -1887,7 +1992,11 @@
             r.mk = mk;
         }
         function popupHTML(r) {
-            return `<h4><span style="font-size:20px">${r.emoji}</span> ${r.title}</h4><p>${r.desc}</p><div style="font-size:11px;margin-top:6px"><span style="color:var(--pri);font-weight:500">⏱️ ${r.time}</span><br><span style="color:var(--txt2)">สถานะ: ${ST[r.status].txt}</span></div>`;
+            let imageHtml = '';
+            if (r.image && r.image.startsWith('data:image')) {
+                imageHtml = `<img src="${r.image}" style="max-width:100%;height:auto;border-radius:8px;margin-bottom:8px;display:block;max-height:200px">`;
+            }
+            return `${imageHtml}<h4><span style="font-size:20px">${r.emoji}</span> ${r.title}</h4><p>${r.desc}</p><div style="font-size:11px;margin-top:6px"><span style="color:var(--pri);font-weight:500">⏱️ ${r.time}</span><br><span style="color:var(--txt2)">สถานะ: ${ST[r.status].txt}</span></div>`;
         }
 
         let currentFilter = 'ทั้งหมด';
@@ -2000,22 +2109,49 @@
             };
         });
 
-        // Event delegation บน document (capture phase) — กัน double-fire ทุกกรณี
-        document.addEventListener('click', e => {
+        // Event delegation บน tlist container — กัน double-fire
+        $('tlist').addEventListener('click', e => {
             const btn = e.target.closest('.advbtn');
-            if (!btn || btn.disabled) return;
+            if (!btn) return;
+            if (btn.disabled) {
+                console.warn('[click] Button is disabled, ignoring click');
+                return;
+            }
+            
             e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
             const docId = btn.dataset.rid;
-            if (!docId) return;
-            if (_advancingDocs.has(docId) || _writingDocs.has(docId)) return;
+            console.log('[click] Button clicked with docId:', docId);
+            
+            if (!docId) {
+                console.error('[click] Button missing data-rid attribute');
+                toast('❌', 'ข้อผิดพลาด', 'ไม่พบรหัสรายการ');
+                return;
+            }
+            
+            if (_advancingDocs.has(docId)) {
+                console.warn('[click] docId already in _advancingDocs:', docId);
+                return;
+            }
+            if (_writingDocs.has(docId)) {
+                console.warn('[click] docId already in _writingDocs:', docId);
+                return;
+            }
+            
+            console.log('[click] Starting advance for docId:', docId);
             _advancingDocs.add(docId);
             btn.disabled = true;
+            
             advance(docId).finally(() => {
+                console.log('[click] Advance completed for docId:', docId);
                 _advancingDocs.delete(docId);
+                // Re-render tracking to refresh button state
+                const activeTab = document.querySelector('.bn-link.on');
+                if (activeTab && activeTab.dataset.t === 'tracking') {
+                    console.log('[click] Re-rendering tracking tab');
+                    setTimeout(() => renderTracking(), 50);
+                }
             });
-        }, true);
+        });
 
         /* ============================================================
            THEME — swap tiles + CSS vars
@@ -2033,10 +2169,13 @@
            MODAL — open / close
            ============================================================ */
         let locMap = null, locMarker = null, rLat = KK_CENTER[0], rLng = KK_CENTER[1];
+        let selectedImageBase64 = null; // เก็บรูปภาพที่เลือก
 
         function openModal() {
             overlay.classList.add('open');
             $('fTitle').value = ''; $('fDesc').value = ''; $('fPhone').value = '';
+            $('fImage').value = ''; selectedImageBase64 = null;
+            $('imagePreview').innerHTML = '';
             rLat = KK_CENTER[0]; rLng = KK_CENTER[1];
             $('loccoord').textContent = 'แตะแผนที่เพื่อเลือกตำแหน่ง หรือกดปุ่ม GPS';
             // Init location map after DOM settles
@@ -2120,6 +2259,55 @@
         });
 
         /* ============================================================
+           IMAGE UPLOAD HANDLER
+           ============================================================ */
+        $('fImage').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // ตรวจสอบขนาดไฟล์ (ไม่เกิน 5 MB)
+            if (file.size > 5 * 1024 * 1024) {
+                toast('⚠️', 'ไฟล์ใหญ่เกินไป', 'กรุณาเลือกรูปที่มีขนาดไม่เกิน 5 MB');
+                $('fImage').value = '';
+                return;
+            }
+
+            // ตรวจสอบประเภทไฟล์
+            if (!file.type.startsWith('image/')) {
+                toast('⚠️', 'ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพเท่านั้น');
+                $('fImage').value = '';
+                return;
+            }
+
+            // อ่านไฟล์และแปลงเป็น Base64
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                selectedImageBase64 = event.target.result;
+                // แสดง preview
+                const previewDiv = $('imagePreview');
+                previewDiv.innerHTML = `
+                    <div class="image-preview-item">
+                        <img src="${selectedImageBase64}" alt="preview">
+                        <button type="button" class="remove-btn" onclick="removeImage()" title="ลบรูปภาพ">✕</button>
+                    </div>
+                `;
+                toast('✅', 'สำเร็จ', 'เลือกรูปภาพแล้ว');
+            };
+            reader.onerror = function() {
+                toast('❌', 'ข้อผิดพลาด', 'ไม่สามารถอ่านไฟล์ได้');
+                $('fImage').value = '';
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function removeImage() {
+            selectedImageBase64 = null;
+            $('fImage').value = '';
+            $('imagePreview').innerHTML = '';
+            toast('🗑️', 'ลบแล้ว', 'ลบรูปภาพแล้ว');
+        }
+
+        /* ============================================================
            SUBMIT REPORT
            ============================================================ */
         msend.onclick = async () => {
@@ -2134,15 +2322,17 @@
                 tl: [{ t: 'รับเรื่องแจ้ง', tm: ts, d: true }, { t: 'ส่งเจ้าหน้าที่ตรวจสอบ', tm: '', d: false }, { t: 'กำลังดำเนินการ', tm: '', d: false }, { t: 'ดำเนินการเสร็จสิ้น', tm: '', d: false }]
             };
 
+            // เพิ่มรูปภาพถ้ามี
+            if (selectedImageBase64) {
+                r.image = selectedImageBase64;
+            }
+
             const btn = msend;
             btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังส่ง...';
             try {
                 if (isFirebaseConfigured) {
-                    const saveData = { ...r };
-                    delete saveData.docId; // ไม่บันทึก docId ที่สร้างจาก client ลง Firestore
-                    delete saveData.mk;
-                    saveData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
-                    await db.collection('reports').add(saveData);
+                    r.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+                    await db.collection('reports').add(r);
                 } else {
                     reports.unshift(r);
                     renderMarkers();
@@ -2150,7 +2340,7 @@
                     if (document.querySelector('.bn-link.on')?.dataset.t === 'tracking') renderTracking();
                 }
                 closeModal();
-                toast('✅', 'แจ้งปัญหาสำเร็จ!', `เรื่อง "${title}" ถูกบันทึกเรียบร้อย`);
+                toast('✅', 'แจ้งปัญหาสำเร็จ!', `เรื่อง "${title}" ถูกบันทึกเรียบร้อยพร้อมรูปภาพ`);
                 map.setView([r.lat, r.lng], 15, { animate: true });
             } catch (e) {
                 toast('❌', 'เกิดข้อผิดพลาด', 'ไม่สามารถส่งข้อมูลได้ กรุณาลองใหม่');
@@ -2167,13 +2357,24 @@
             const el = $('tlist');
             // ล้างและ rebuild ใหม่ทุกครั้ง
             el.innerHTML = '';
-            // รวมรายการที่กำลัง write อยู่ด้วย (แม้ status=done) เพื่อแสดง spinner/toast ก่อน card หาย
-            const filtered = getFilteredReports().filter(r => r.status !== 'done' || _writingDocs.has(r.docId) || _pendingDoneCards.has(r.docId));
+            // แสดงเฉพาะรายการที่ยังไม่เสร็จ โดยที่กำลัง write อยู่ให้แสดง spinner ชั่วคราว
+            const filtered = getFilteredReports().filter(r => {
+                // ถ้าเสร็จแล้ว ให้หายไป (ไม่แสดงแม้จะกำลัง write)
+                if (r.status === 'done') return false;
+                // มิฉะนั้นแสดงปกติ
+                return true;
+            });
+            
+            console.log('[renderTracking] Filtered reports count:', filtered.length, 'Total reports:', reports.length);
+            
             if (!filtered.length) {
                 el.innerHTML = '<div class="empty"><i class="fas fa-clipboard-list"></i><p>ยังไม่มีเรื่องที่ต้องติดตาม</p></div>';
                 return;
             }
-            filtered.forEach(r => {
+            
+            filtered.forEach((r, idx) => {
+                console.log('[renderTracking] Rendering card', idx + 1, 'docId:', r.docId, 'status:', r.status, 'isAdmin:', isAdmin);
+                
                 const s = ST[r.status] || ST.pending;
                 // คำนวณ progress จาก tl จริง
                 const total = r.tl ? r.tl.length : 4;
@@ -2194,22 +2395,34 @@
                     });
                 }
 
-                // ปุ่มเลื่อนสถานะ — แสดงเฉพาะ admin + ยังไม่ done
+                // ปุ่มเลื่อนสถานะ
                 const isWriting = _writingDocs.has(r.docId);
                 const isPendingDone = _pendingDoneCards.has(r.docId);
                 let advBtnHtml = '';
+                
                 if (isWriting) {
                     // กำลังบันทึก — แสดง spinner เสมอ ไม่ว่าสถานะจะเป็นอะไร
+                    console.log('[renderTracking]', r.docId, 'is writing');
                     advBtnHtml = `<button class="advbtn" data-rid="${r.docId}" disabled><i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...</button>`;
                 } else if (isPendingDone || r.status === 'done') {
+                    console.log('[renderTracking]', r.docId, 'is done');
                     advBtnHtml = `<div style="text-align:center;padding:8px 0;font-size:13px;color:var(--ok);font-weight:600">✅ ดำเนินการเสร็จสิ้นแล้ว</div>`;
-                } else if (r.status !== 'done' && isAdmin) {
-                    advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
+                } else if (r.status !== 'done') {
+                    // แสดงปุ่มสำหรับ admin
+                    if (isAdmin) {
+                        console.log('[renderTracking]', r.docId, 'showing button for admin');
+                        advBtnHtml = `<button class="advbtn" data-rid="${r.docId}"><i class="fas fa-arrow-right"></i> เลื่อนสถานะ</button>`;
+                    } else {
+                        console.log('[renderTracking]', r.docId, 'user not admin, showing login message');
+                        advBtnHtml = `<div style="text-align:center;padding:8px 0;font-size:12px;color:var(--txt2)">🔒 เข้าสู่ระบบ Admin เพื่อเลื่อนสถานะ</div>`;
+                    }
                 }
+                
                 const displayId = r.id ? String(r.id).slice(-6) : r.docId.slice(-6);
 
                 const card = document.createElement('div');
                 card.className = 'tcard';
+                card.setAttribute('data-docid', r.docId);
                 card.innerHTML = `
                     <div class="thead">
                         <span class="te">${r.emoji}</span>
@@ -2235,10 +2448,22 @@
         } // end renderTracking
 
         async function advance(docId) {
-            // ป้องกัน double-call — _advancingDocs ถูก set แล้วจาก event delegation
-            if (_writingDocs.has(docId)) return;
-            const r = reports.find(x => String(x.docId) === String(docId));
-            if (!r || r.status === 'done') return;
+            // ป้องกัน double-call
+            if (_writingDocs.has(docId)) {
+                console.warn('[advance] Already writing to:', docId);
+                return;
+            }
+            
+            const r = reports.find(x => String(x.docId).trim() === String(docId).trim());
+            if (!r) {
+                console.error('[advance] Report not found with docId:', docId, 'Available docIds:', reports.map(x => x.docId));
+                toast('❌', 'ข้อผิดพลาด', 'ไม่พบรายการที่ต้องการ');
+                return;
+            }
+            if (r.status === 'done') {
+                console.warn('[advance] Report already done:', docId);
+                return;
+            }
 
             const now = new Date();
             const ts = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -2249,8 +2474,24 @@
 
             // คำนวณ state ใหม่ — เลื่อน step แรกที่ยังไม่ done
             const newTl = JSON.parse(JSON.stringify(r.tl));
-            for (const item of newTl) { if (!item.d) { item.d = true; item.tm = ts; break; } }
+            let foundStep = false;
+            for (const item of newTl) { 
+                if (!item.d) { 
+                    item.d = true; 
+                    item.tm = ts; 
+                    foundStep = true;
+                    console.log('[advance] Marked step as done:', item.t);
+                    break; 
+                } 
+            }
+            
+            if (!foundStep) {
+                console.warn('[advance] All steps already marked as done');
+                return;
+            }
+            
             const newStatus = newTl.every(x => x.d) ? 'done' : 'progress';
+            console.log('[advance] Status transition:', oldStatus, '→', newStatus, 'for docId:', docId);
 
             // lock + อัปเดต local ทันที
             _writingDocs.add(docId);
@@ -2261,18 +2502,30 @@
             renderList();
 
             try {
-                if (isFirebaseConfigured) {
+                if (isFirebaseConfigured && db && auth && !firebaseInitFailed) {
                     const docRef = db.collection('reports').doc(docId);
-                    const snap = await docRef.get();
-                    if (snap.exists) {
-                        await docRef.update({ status: newStatus, tl: newTl });
-                    } else {
-                        const saveData = { ...r, status: newStatus, tl: newTl };
-                        delete saveData.mk;
-                        await docRef.set(saveData, { merge: true });
+                    console.log('[advance] Attempting Firestore update for:', docId);
+                    
+                    try {
+                        const snap = await docRef.get();
+                        if (snap.exists) {
+                            console.log('[advance] Document exists, updating fields');
+                            await docRef.update({ status: newStatus, tl: newTl });
+                            console.log('[advance] Firestore update successful for:', docId);
+                        } else {
+                            console.log('[advance] Document does not exist, creating new entry');
+                            const saveData = JSON.parse(JSON.stringify(r));
+                            delete saveData.mk;
+                            await docRef.set(saveData, { merge: true });
+                            console.log('[advance] Firestore set successful for:', docId);
+                        }
+                    } catch (firebaseErr) {
+                        console.error('[advance] Firebase operation failed:', firebaseErr.code, firebaseErr.message);
+                        throw firebaseErr;
                     }
                 } else {
                     // Fallback mode — simulate async
+                    console.log('[advance] Using fallback mode (isFirebaseConfigured:', isFirebaseConfigured, 'db:', !!db, 'auth:', !!auth, 'firebaseInitFailed:', firebaseInitFailed, ')');
                     await new Promise(res => setTimeout(res, 400));
                 }
 
@@ -2292,6 +2545,7 @@
                 }
             } catch (err) {
                 // rollback
+                console.error('[advance] Error occurred, rolling back:', err.message || err);
                 r.status = oldStatus;
                 r.tl = oldTl;
                 if (r.mk) r.mk.setPopupContent(popupHTML(r));
@@ -2299,8 +2553,9 @@
                 _pendingDoneCards.delete(docId);
                 renderTracking();
                 renderList();
-                toast('❌', 'ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + (err?.message || String(err)));
-                console.error('[advance]', err);
+                const errMsg = err?.message || String(err);
+                toast('❌', 'ข้อผิดพลาด', 'บันทึกไม่สำเร็จ: ' + errMsg);
+                console.error('[advance] Full error details:', err);
             }
         }
 
@@ -2314,8 +2569,8 @@
         /* ============================================================
            LINE NOTIFY
            ============================================================ */
-        // Firebase Cloud Function URL (token เก็บไว้ฝั่ง server แล้ว ไม่ต้องส่งจาก client)
-        const LINE_FUNCTION_URL = '/api/send-line';
+        // Node.js server proxy URL (token เก็บไว้ใน server.js แล้ว ไม่ต้องส่งจาก client)
+        const LINE_FUNCTION_URL = '/send-line';
 
         async function sendLineNotify(message) {
             try {
@@ -2390,20 +2645,53 @@
         function bo() { const c = cf(); return { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: c.lg, font: { family: 'Kanit', size: 11 }, boxWidth: 14, padding: 8 } } } } }
 
         function tyCounts() { const m = {}; reports.forEach(r => { m[r.emoji] = (m[r.emoji] || 0) + 1 }); return m }
+        // derive Date for a report: prefer Firestore Timestamp, numeric ts, or fallback to now
+        function getReportDate(r) {
+            try {
+                if (!r) return new Date();
+                if (r.timestamp && typeof r.timestamp.toDate === 'function') return r.timestamp.toDate();
+                if (r.timestamp && typeof r.timestamp === 'number') return new Date(r.timestamp);
+                if (r.ts && typeof r.ts === 'number') return new Date(r.ts);
+            } catch (e) { }
+            return new Date();
+        }
+
+        function computeWeekCounts() {
+            const counts = [0, 0, 0, 0, 0, 0, 0]; // Mon..Sun
+            reports.forEach(r => {
+                const d = getReportDate(r);
+                const day = d.getDay(); // 0=Sun..6=Sat
+                const idx = (day + 6) % 7; // map Mon->0 .. Sun->6
+                counts[idx]++;
+            });
+            return counts;
+        }
+
+        function computeHourCounts() {
+            const counts = new Array(24).fill(0);
+            reports.forEach(r => {
+                const d = getReportDate(r);
+                counts[d.getHours()]++;
+            });
+            return counts;
+        }
 
         function initCharts() {
             const c = cf(), tc = tyCounts(), ek = Object.keys(tc), ev = Object.values(tc);
             chT = new Chart($('cType'), { type: 'doughnut', data: { labels: ek.map(e => e + ' '), datasets: [{ data: ev, backgroundColor: cArr.slice(0, ek.length).map(x => x.b), borderColor: cArr.slice(0, ek.length).map(x => x.s), borderWidth: 2, hoverOffset: 8 }] }, options: { ...bo(), cutout: '60%', plugins: { ...bo().plugins, legend: { ...bo().plugins.legend, position: 'right' } } } });
 
-            chW = new Chart($('cWeek'), { type: 'bar', data: { labels: ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'], datasets: [{ label: 'รายงาน', data: [5, 8, 12, 7, 15, 9, reports.length], backgroundColor: x => { const g = x.chart.ctx.createLinearGradient(0, 0, 0, 170); g.addColorStop(0, 'rgba(56,189,248,.8)'); g.addColorStop(1, 'rgba(129,140,248,.25)'); return g }, borderRadius: 8, borderSkipped: false, barPercentage: .55 }] }, options: { ...bo(), plugins: { legend: { display: false } }, scales: { x: { ticks: { color: c.tk, font: { family: 'Kanit', size: 11 } }, grid: { display: false }, border: { display: false } }, y: { beginAtZero: true, ticks: { color: c.tk, font: { size: 10 }, stepSize: 5 }, grid: { color: c.gr }, border: { display: false } } } } });
+            const weekLabels = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
+            chW = new Chart($('cWeek'), { type: 'bar', data: { labels: weekLabels, datasets: [{ label: 'รายงาน', data: computeWeekCounts(), backgroundColor: x => { const g = x.chart.ctx.createLinearGradient(0, 0, 0, 170); g.addColorStop(0, 'rgba(56,189,248,.8)'); g.addColorStop(1, 'rgba(129,140,248,.25)'); return g }, borderRadius: 8, borderSkipped: false, barPercentage: .55 }] }, options: { ...bo(), plugins: { legend: { display: false } }, scales: { x: { ticks: { color: c.tk, font: { family: 'Kanit', size: 11 } }, grid: { display: false }, border: { display: false } }, y: { beginAtZero: true, ticks: { color: c.tk, font: { size: 10 }, stepSize: 1 }, grid: { color: c.gr }, border: { display: false } } } } });
 
-            chH = new Chart($('cHour'), { type: 'line', data: { labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'], datasets: [{ label: 'เหตุการณ์', data: [1, 4, 6, 3, 8, 12, 9, 5, 2], fill: true, backgroundColor: x => { const g = x.chart.ctx.createLinearGradient(0, 0, 0, 170); g.addColorStop(0, 'rgba(56,189,248,.3)'); g.addColorStop(1, 'rgba(56,189,248,0)'); return g }, borderColor: '#38bdf8', borderWidth: 2.5, pointBackgroundColor: '#38bdf8', pointBorderColor: dark ? '#0f172a' : '#fff', pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 7, tension: .4 }] }, options: { ...bo(), plugins: { legend: { display: false } }, scales: { x: { ticks: { color: c.tk, font: { family: 'Kanit', size: 10 } }, grid: { display: false }, border: { display: false } }, y: { beginAtZero: true, ticks: { color: c.tk, font: { size: 10 }, stepSize: 4 }, grid: { color: c.gr }, border: { display: false } } } } });
+            const hourLabels = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00');
+            chH = new Chart($('cHour'), { type: 'line', data: { labels: hourLabels, datasets: [{ label: 'เหตุการณ์', data: computeHourCounts(), fill: true, backgroundColor: x => { const g = x.chart.ctx.createLinearGradient(0, 0, 0, 170); g.addColorStop(0, 'rgba(56,189,248,.3)'); g.addColorStop(1, 'rgba(56,189,248,0)'); return g }, borderColor: '#38bdf8', borderWidth: 2.5, pointBackgroundColor: '#38bdf8', pointBorderColor: dark ? '#0f172a' : '#fff', pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 7, tension: .4 }] }, options: { ...bo(), plugins: { legend: { display: false } }, scales: { x: { ticks: { color: c.tk, font: { family: 'Kanit', size: 10 } }, grid: { display: false }, border: { display: false } }, y: { beginAtZero: true, ticks: { color: c.tk, font: { size: 10 }, stepSize: 1 }, grid: { color: c.gr }, border: { display: false } } } } });
         }
 
         function updCharts() {
             if (!chT) return;
             const tc = tyCounts(); chT.data.labels = Object.keys(tc).map(e => e + ' '); chT.data.datasets[0].data = Object.values(tc); chT.update('active');
-            chW.data.datasets[0].data[6] = reports.length; chW.update('active');
+            if (chW) { chW.data.datasets[0].data = computeWeekCounts(); chW.update('active'); }
+            if (chH) { chH.data.datasets[0].data = computeHourCounts(); chH.update('active'); }
         }
 
         function updChartTheme() {
