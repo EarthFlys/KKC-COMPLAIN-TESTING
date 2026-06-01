@@ -5,6 +5,9 @@ const path = require('path');
 
 const PORT = 3000;
 
+// ===== LINE Channel Access Token (เก็บไว้ฝั่ง server — ไม่ส่งให้ client รู้) =====
+const LINE_TOKEN = 'n8IV3g+a9mkQPJ/Wg+MzaTfrqjKsn9hGF/JlE8v8KzplhNSN9xAfcl9p2F1NF8/9TolFzBUnIE3HDlbwINrTz6sJzorst4JZSO39NWa0t4qIokPAeuHxGarC+Qtbuwi/7m0g4JRz5D7KiFbna4bgswdB04t89/1O/w1cDnyilFU=';
+
 const MIME_TYPES = {
   '.html': 'text/html',
   '.css': 'text/css',
@@ -37,7 +40,7 @@ const server = http.createServer((req, res) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + data.token
+            'Authorization': 'Bearer ' + LINE_TOKEN
           }
         }, (lineRes) => {
           let lineBody = '';
